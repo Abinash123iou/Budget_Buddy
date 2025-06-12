@@ -10,6 +10,7 @@ class BudgetCalculator {
         this.loadData();
         this.bindEvents();
         this.updateDisplay();
+        this.setDefaultDateTime();
     }
 
     bindEvents() {
@@ -45,6 +46,10 @@ class BudgetCalculator {
         document.getElementById('expenseDescription').addEventListener('keypress', (e) => {
             if (e.key === 'Enter') this.addExpense();
         });
+
+        document.getElementById('expenseDateTime').addEventListener('keypress', (e) => {
+            if (e.key === 'Enter') this.addExpense();
+        });
     }
 
     setBudget() {
@@ -74,10 +79,12 @@ class BudgetCalculator {
         const amountInput = document.getElementById('expenseAmount');
         const categorySelect = document.getElementById('expenseCategory');
         const descriptionInput = document.getElementById('expenseDescription');
+        const dateTimeInput = document.getElementById('expenseDateTime');
 
         const amount = parseFloat(amountInput.value);
         const category = categorySelect.value;
         const description = descriptionInput.value.trim();
+        const dateTime = dateTimeInput.value;
 
         // Validation
         if (!amount || amount <= 0) {
@@ -95,6 +102,11 @@ class BudgetCalculator {
             return;
         }
 
+        if (!dateTime) {
+            this.showAlert('Please select a date and time', 'warning');
+            return;
+        }
+
         const remainingBalance = this.getRemainingBalance();
         
         // Check if expense exceeds remaining budget
@@ -109,7 +121,7 @@ class BudgetCalculator {
             amount: amount,
             category: category,
             description: description,
-            date: new Date().toISOString(),
+            date: new Date(dateTime).toISOString(),
             balanceAfter: remainingBalance - amount
         };
 
@@ -122,6 +134,7 @@ class BudgetCalculator {
         amountInput.value = '';
         categorySelect.value = '';
         descriptionInput.value = '';
+        this.setDefaultDateTime();
 
         this.showAlert('Expense added successfully!', 'success');
     }
@@ -215,7 +228,7 @@ class BudgetCalculator {
             const row = document.createElement('tr');
             row.innerHTML = `
                 <td>
-                    <small class="text-muted">
+                    <small class="text-muted editable-date" data-expense-id="${expense.id}" style="cursor: pointer;">
                         ${this.formatDateTime(expense.date)}
                     </small>
                 </td>
@@ -228,7 +241,10 @@ class BudgetCalculator {
                     ${this.formatCurrency(expense.balanceAfter)}
                 </td>
                 <td>
-                    <button class="btn btn-outline-danger btn-sm" onclick="budgetCalculator.deleteExpense(${expense.id})">
+                    <button class="btn btn-outline-primary btn-sm me-1" onclick="budgetCalculator.editExpenseDateTime(${expense.id})" title="Edit Date & Time">
+                        <i class="fas fa-edit"></i>
+                    </button>
+                    <button class="btn btn-outline-danger btn-sm" onclick="budgetCalculator.deleteExpense(${expense.id})" title="Delete Expense">
                         <i class="fas fa-trash"></i>
                     </button>
                 </td>
@@ -388,6 +404,92 @@ class BudgetCalculator {
                 document.getElementById('expenseHistory').style.display = 'block';
                 document.getElementById('categorySummary').style.display = 'block';
             }
+        }
+    }
+
+    setDefaultDateTime() {
+        const now = new Date();
+        const localDateTime = new Date(now.getTime() - (now.getTimezoneOffset() * 60000));
+        const formattedDateTime = localDateTime.toISOString().slice(0, 16);
+        document.getElementById('expenseDateTime').value = formattedDateTime;
+    }
+
+    editExpenseDateTime(expenseId) {
+        const expense = this.expenses.find(exp => exp.id === expenseId);
+        if (!expense) return;
+
+        // Create a modal-like prompt using SweetAlert-style confirmation
+        const currentDate = new Date(expense.date);
+        const localDateTime = new Date(currentDate.getTime() - (currentDate.getTimezoneOffset() * 60000));
+        const formattedDateTime = localDateTime.toISOString().slice(0, 16);
+
+        // Create a temporary input element for date/time selection
+        const tempDiv = document.createElement('div');
+        tempDiv.innerHTML = `
+            <div class="modal fade show" style="display: block; background: rgba(0,0,0,0.5);" tabindex="-1">
+                <div class="modal-dialog modal-dialog-centered">
+                    <div class="modal-content">
+                        <div class="modal-header">
+                            <h5 class="modal-title">
+                                <i class="fas fa-edit me-2"></i>Edit Date & Time
+                            </h5>
+                        </div>
+                        <div class="modal-body">
+                            <div class="mb-3">
+                                <label class="form-label">Current: ${this.formatDateTime(expense.date)}</label>
+                                <input type="datetime-local" class="form-control" id="editDateTime" value="${formattedDateTime}">
+                            </div>
+                            <div class="text-muted small">
+                                <strong>Expense:</strong> ${expense.description} - ${this.formatCurrency(expense.amount)}
+                            </div>
+                        </div>
+                        <div class="modal-footer">
+                            <button type="button" class="btn btn-secondary" onclick="budgetCalculator.closeEditModal()">Cancel</button>
+                            <button type="button" class="btn btn-primary" onclick="budgetCalculator.saveEditedDateTime(${expenseId})">Save Changes</button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        `;
+        
+        document.body.appendChild(tempDiv);
+        this.currentEditModal = tempDiv;
+        
+        // Focus on the input
+        setTimeout(() => {
+            document.getElementById('editDateTime').focus();
+        }, 100);
+
+        // Handle Enter key
+        document.getElementById('editDateTime').addEventListener('keypress', (e) => {
+            if (e.key === 'Enter') this.saveEditedDateTime(expenseId);
+        });
+    }
+
+    saveEditedDateTime(expenseId) {
+        const newDateTime = document.getElementById('editDateTime').value;
+        
+        if (!newDateTime) {
+            this.showAlert('Please select a valid date and time', 'warning');
+            return;
+        }
+
+        const expense = this.expenses.find(exp => exp.id === expenseId);
+        if (!expense) return;
+
+        expense.date = new Date(newDateTime).toISOString();
+        
+        this.saveData();
+        this.updateDisplay();
+        this.closeEditModal();
+        
+        this.showAlert('Date & time updated successfully!', 'success');
+    }
+
+    closeEditModal() {
+        if (this.currentEditModal) {
+            this.currentEditModal.remove();
+            this.currentEditModal = null;
         }
     }
 }
